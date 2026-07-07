@@ -1,0 +1,234 @@
+name: CI
+
+on:
+  # Disabled to prevent automatic runs on every push/PR — only manual trigger.
+  # push:
+  #   branches: ["**"]
+  # pull_request:
+  workflow_dispatch:
+    inputs:
+      timeout-minutes:
+        description: "Test step timeout (minutes)"
+        type: number
+        default: 30
+      test-paths:
+        description: "Test files to run (space-separated, relative to repo root). Default: tests/ (all)"
+        type: string
+        default: "tests/"
+      browser-firefox:
+        description: "Firefox"
+        type: boolean
+        default: true
+      browser-edge:
+        description: "Microsoft Edge"
+        type: boolean
+        default: true
+      browser-webkit:
+        description: "WebKit (Safari)"
+        type: boolean
+        default: true
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-firefox:
+    name: Firefox
+    if: github.event_name != 'workflow_dispatch' || inputs.browser-firefox
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # --no-deps avoids the pytest-html version conflict between the two
+          # custom forks. All transitive deps are pinned in requirements.txt.
+          pip install --no-deps -r requirements.txt
+
+      - name: Ensure reports directory exists
+        run: mkdir -p reports
+
+      - name: Run tests (Firefox)
+        continue-on-error: true
+        timeout-minutes: ${{ fromJSON(inputs.timeout-minutes) }}
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest ${{ inputs.test-paths }} \
+            --browser=firefox \
+            -n=2 \
+            --dist=loadscope \
+            --tb=short \
+            --html=reports/report_firefox.html \
+            --self-contained-html \
+            --enable-history
+
+      - name: Generate fallback report if tests did not complete
+        if: failure() || cancelled()
+        run: |
+          if [ ! -f reports/report_firefox.html ]; then
+            cat > reports/report_firefox.html << 'EOF'
+            <!DOCTYPE html>
+            <html>
+            <head><title>Firefox — Tests Did Not Complete</title></head>
+            <body style="font-family:sans-serif;padding:2em;">
+              <h1>Firefox</h1>
+              <p>The test run was <strong>cancelled or timed out</strong> before pytest could generate the full report.</p>
+              <p>Check the workflow logs for partial output.</p>
+            </body>
+            </html>
+            EOF
+          fi
+
+      - name: Upload Firefox report
+        uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: test-report-firefox
+          path: reports/
+          retention-days: 14
+
+  test-edge:
+    name: Edge
+    if: github.event_name != 'workflow_dispatch' || inputs.browser-edge
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install Microsoft Edge
+        run: |
+          curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
+            | sudo gpg --dearmor -o /usr/share/keyrings/microsoft-edge.gpg
+          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft-edge.gpg] https://packages.microsoft.com/repos/edge stable main" \
+            | sudo tee /etc/apt/sources.list.d/microsoft-edge.list
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq microsoft-edge-stable
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install --no-deps -r requirements.txt
+
+      - name: Ensure reports directory exists
+        run: mkdir -p reports
+
+      - name: Run tests (Edge)
+        continue-on-error: true
+        timeout-minutes: ${{ fromJSON(inputs.timeout-minutes) }}
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest ${{ inputs.test-paths }} \
+            --browser=edge \
+            -n=2 \
+            --dist=loadscope \
+            --tb=short \
+            --html=reports/report_edge.html \
+            --self-contained-html \
+            --enable-history
+
+      - name: Generate fallback report if tests did not complete
+        if: failure() || cancelled()
+        run: |
+          if [ ! -f reports/report_edge.html ]; then
+            cat > reports/report_edge.html << 'EOF'
+            <!DOCTYPE html>
+            <html>
+            <head><title>Edge — Tests Did Not Complete</title></head>
+            <body style="font-family:sans-serif;padding:2em;">
+              <h1>Edge</h1>
+              <p>The test run was <strong>cancelled or timed out</strong> before pytest could generate the full report.</p>
+              <p>Check the workflow logs for partial output.</p>
+            </body>
+            </html>
+            EOF
+          fi
+
+      - name: Upload Edge report
+        uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: test-report-edge
+          path: reports/
+          retention-days: 14
+
+  test-webkit:
+    name: WebKit (Safari)
+    if: github.event_name != 'workflow_dispatch' || inputs.browser-webkit
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install --no-deps -r requirements.txt
+
+      - name: Ensure reports directory exists
+        run: mkdir -p reports
+
+      - name: Enable safaridriver
+        run: sudo safaridriver --enable
+
+      - name: Run tests (WebKit)
+        continue-on-error: true
+        timeout-minutes: ${{ fromJSON(inputs.timeout-minutes) }}
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest ${{ inputs.test-paths }} \
+            --browser=webkit \
+            -n=2 \
+            --dist=loadscope \
+            --tb=short \
+            --html=reports/report_webkit.html \
+            --self-contained-html \
+            --enable-history
+
+      - name: Generate fallback report if tests did not complete
+        if: failure() || cancelled()
+        run: |
+          if [ ! -f reports/report_webkit.html ]; then
+            cat > reports/report_webkit.html << 'EOF'
+            <!DOCTYPE html>
+            <html>
+            <head><title>WebKit — Tests Did Not Complete</title></head>
+            <body style="font-family:sans-serif;padding:2em;">
+              <h1>WebKit</h1>
+              <p>The test run was <strong>cancelled or timed out</strong> before pytest could generate the full report.</p>
+              <p>Check the workflow logs for partial output.</p>
+            </body>
+            </html>
+            EOF
+          fi
+
+      - name: Upload WebKit report
+        uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: test-report-webkit
+          path: reports/
+          retention-days: 14

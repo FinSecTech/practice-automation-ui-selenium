@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+.pytest_cache/
+experiments/
+pages/__pycache__
+reports/
+tests/__pycache__
+.env
+test-history.db

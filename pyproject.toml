@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "practice-automation-test-framework"
+version = "1.0.0"
+description = "UI test framework for https://practice-automation.com — cross-browser Selenium tests"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "Eugene Popov", email = "NONE" },
+    { name = "AI", email = "NONE" },
+]
+requires-python = ">=3.12"
+dependencies = [
+    "selenium>=4.0",
+    "requests>=2.31",
+    "webdriver-manager>=4.0",
+    "pytest>=9.0",
+    "pytest-html @ git+https://github.com/FinSecTech/pytest-html.git@master",
+    "pytest-html-dashboard @ git+https://github.com/FinSecTech/pytest-html-dashboard.git@main",
+    "pytest-metadata>=3.0",
+    "pytest-xdist>=3.0",
+    "pytest-rerunfailures>=16.4",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff",
+    "mypy",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = []
+addopts = [
+    "--reruns=3",
+    "--reruns-delay=10",
+    "--dist=loadscope",
+]
